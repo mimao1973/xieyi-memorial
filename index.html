@@ -482,227 +482,256 @@ function scrollToMessages() {
 
 renderMessages();
 
-// ======== 背景音乐 - Web Audio API 生成轻柔忧伤钢琴/古琴哀乐 ========
+// ======== 背景音乐 - Web Audio API 神秘园风格忧伤钢琴+弦乐 ========
 let audioCtx = null;
 let musicPlaying = false;
 let musicTimer = null;
 let masterGain = null;
 let reverbGain = null;
 let reverbNode = null;
+let stringGain = null;
 
-// 中国五声音阶频率 (宫商角徵羽，低八度到高八度)
-const PENTATONIC = [
-    130.81, 146.83, 164.81, 196.00, 220.00,  // 低音 宫商角徵羽
-    261.63, 293.66, 329.63, 392.00, 440.00,  // 中音
-    523.25, 587.33, 659.25, 783.99, 880.00    // 高音
-];
+// D小调音阶频率 (神秘园常用调性)
+const N = {
+    D3:146.83, E3:164.81, F3:174.61, G3:196.00, A3:220.00, Bb3:233.08, C4:261.63,
+    D4:293.66, E4:329.63, F4:349.23, G4:392.00, A4:440.00, Bb4:466.16, C5:523.25,
+    D5:587.33, E5:659.25, F5:698.46, G5:783.99, A5:880.00,
+    REST:-1
+};
 
-// 哀伤旋律 - 节奏适中，模拟《梁祝》《送别》风格
-// [频率索引, 持续时间(拍)]  空拍用 [-1, n] 表示休止
+// 主旋律 - 神秘园风格，忧郁深情
+// [音符, 持续拍数]
 const MELODY_A = [
-    [5, 2], [7, 1], [9, 2], [7, 1], [5, 2],       // 角 羽 高徵 羽 角
-    [4, 1], [2, 2], [4, 1], [5, 3],                // 商 低角 商 角
-    [7, 2], [9, 1], [9, 1], [7, 2], [5, 2],        // 羽 高徵 高徵 羽 角
-    [4, 1], [2, 2], [0, 1], [2, 3],                // 商 低角 低宫 低角
-    [5, 2], [7, 1], [9, 2], [7, 1], [5, 2],        // 角 羽 高徵 羽 角
-    [4, 1], [2, 2], [4, 1], [2, 2], [0, 2],        // 商 低角 商 低角 低宫
-    [2, 1], [4, 2], [5, 1], [4, 2], [2, 3],        // 低角 商 角 商 低角
+    [N.D4, 2], [N.F4, 1], [N.A4, 2], [N.G4, 1], [N.F4, 2],
+    [N.E4, 1], [N.D4, 2], [N.E4, 1], [N.F4, 3],
+    [N.A4, 2], [N.D5, 1], [N.C5, 1.5], [N.A4, 0.5], [N.G4, 2],
+    [N.F4, 1], [N.E4, 2], [N.D4, 1], [N.E4, 3],
+    [N.F4, 2], [N.A4, 1], [N.C5, 2], [N.Bb4, 1], [N.A4, 2],
+    [N.G4, 1], [N.F4, 1.5], [N.E4, 0.5], [N.D4, 3],
 ];
 
 const MELODY_B = [
-    [5, 2], [7, 2], [9, 2], [7, 1], [5, 2],        // 角 羽 高徵 羽 角
-    [4, 1], [5, 1], [4, 2], [2, 3],                // 商 角 商 低角
-    [0, 2], [2, 1], [4, 2], [5, 1], [4, 2],        // 低宫 低角 商 角 商
-    [2, 1], [0, 2], [-1, 1], [2, 3],               // 低角 低宫 休 低角
-    [5, 2], [4, 1], [2, 2], [4, 1], [5, 2],        // 角 商 低角 商 角
-    [7, 1], [5, 2], [4, 1], [2, 2], [0, 3],        // 羽 角 商 低角 低宫
-    [0, 2], [-1, 2],                                // 低宫 休
+    [N.A4, 2], [N.D5, 1], [N.C5, 2], [N.Bb4, 1], [N.A4, 2],
+    [N.G4, 1], [N.F4, 2], [N.G4, 1], [N.A4, 3],
+    [N.F4, 2], [N.E4, 1], [N.D4, 2], [N.E4, 1], [N.F4, 2],
+    [N.D4, 1], [N.C4, 2], [N.D4, 3],
+    [N.REST, 1], [N.D4, 2], [N.F4, 1], [N.A4, 2], [N.G4, 1], [N.F4, 2],
+    [N.E4, 1], [N.D4, 2], [N.REST, 1], [N.D4, 3],
 ];
 
-// 琶音伴奏 - 轻柔分解和弦
-const ARPEGGIO = [
-    [0, 2], [2, 2], [4, 2], [2, 2], [0, 2], [4, 2], [2, 2], [0, 2],
-    [2, 2], [4, 2], [5, 2], [4, 2], [2, 2], [0, 2], [2, 2], [4, 2],
-    [0, 2], [4, 2], [5, 2], [4, 2], [2, 2], [0, 2], [2, 2], [0, 2],
-    [0, 2], [2, 2], [4, 2], [5, 2], [4, 2], [2, 2], [0, 2], [0, 2],
+// 弦乐和声 - 持续的长音铺底
+const STRINGS_A = [
+    { notes: [N.D3, N.A3, N.D4], start: 0, dur: 10 },
+    { notes: [N.G3, N.Bb3, N.D4], start: 10, dur: 9 },
+    { notes: [N.Bb3, N.D4, N.F4], start: 19, dur: 9 },
+    { notes: [N.A3, N.D4, N.F4], start: 28, dur: 8 },
+];
+
+const STRINGS_B = [
+    { notes: [N.D3, N.A3, N.D4], start: 0, dur: 10 },
+    { notes: [N.Bb3, N.D4, N.F4], start: 10, dur: 9 },
+    { notes: [N.F3, N.A3, N.C4], start: 19, dur: 8 },
+    { notes: [N.G3, N.Bb3, N.D4], start: 27, dur: 9 },
+];
+
+// 左手钢琴伴奏 - 分解和弦
+const PIANO_L = [
+    [N.D3, 1.5], [N.A3, 1.5], [N.D4, 1], [N.A3, 1], [N.D4, 1.5], [N.A3, 1.5],
+    [N.Bb3, 1.5], [N.F3, 1.5], [N.Bb3, 1], [N.F3, 1], [N.Bb3, 1.5], [N.F3, 1.5],
+    [N.G3, 1.5], [N.Bb3, 1.5], [N.G3, 1], [N.Bb3, 1], [N.G3, 1.5], [N.Bb3, 1.5],
+    [N.A3, 1.5], [N.E3, 1.5], [N.A3, 1], [N.E3, 1], [N.A3, 1.5], [N.E3, 1.5],
 ];
 
 function initAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // 主输出
+
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.25;
-    
-    // 创建混响效果 - 模拟空旷感
+    masterGain.gain.value = 0.30;
+
+    stringGain = audioCtx.createGain();
+    stringGain.gain.value = 0.08;
+
     reverbGain = audioCtx.createGain();
-    reverbGain.gain.value = 0.15;
-    
+    reverbGain.gain.value = 0.20;
+
     const convolver = audioCtx.createConvolver();
     const sampleRate = audioCtx.sampleRate;
-    const length = sampleRate * 3; // 3秒混响
+    const length = sampleRate * 4;
     const impulse = audioCtx.createBuffer(2, length, sampleRate);
     for (let ch = 0; ch < 2; ch++) {
         const channelData = impulse.getChannelData(ch);
         for (let i = 0; i < length; i++) {
-            channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+            channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.2);
         }
     }
     convolver.buffer = impulse;
-    
+
     masterGain.connect(audioCtx.destination);
+    stringGain.connect(audioCtx.destination);
+    masterGain.connect(reverbGain);
+    stringGain.connect(reverbGain);
     reverbGain.connect(convolver);
     convolver.connect(audioCtx.destination);
     reverbNode = convolver;
 }
 
-function playGuqinNote(freq, startTime, duration, volume) {
+// 钢琴音色 - 带泛音和击弦声
+function playPiano(freq, startTime, duration, volume) {
     if (!audioCtx || freq < 0) return;
-    
-    // 基音 - 正弦波模拟琴弦
+    volume = Math.min(volume, 0.3);
+
     const osc1 = audioCtx.createOscillator();
     const gain1 = audioCtx.createGain();
     osc1.type = 'sine';
     osc1.frequency.value = freq;
-    
-    // 古琴包络：快起慢衰，带揉弦效果
     gain1.gain.setValueAtTime(0, startTime);
-    gain1.gain.linearRampToValueAtTime(volume, startTime + 0.08);
-    gain1.gain.linearRampToValueAtTime(volume * 0.7, startTime + 0.3);
-    gain1.gain.exponentialRampToValueAtTime(volume * 0.15, startTime + duration * 0.7);
+    gain1.gain.linearRampToValueAtTime(volume, startTime + 0.005);
+    gain1.gain.exponentialRampToValueAtTime(volume * 0.5, startTime + 0.1);
+    gain1.gain.exponentialRampToValueAtTime(volume * 0.15, startTime + duration * 0.6);
     gain1.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-    
-    // 轻微揉弦（频率微调）
-    const vibrato = audioCtx.createOscillator();
-    const vibratoGain = audioCtx.createGain();
-    vibrato.frequency.value = 5; // 5Hz揉弦
-    vibratoGain.gain.value = freq * 0.005; // 极轻的揉弦
-    vibrato.connect(vibratoGain);
-    vibratoGain.connect(osc1.frequency);
-    vibrato.start(startTime + 0.3);
-    vibrato.stop(startTime + duration);
-    
     osc1.connect(gain1);
     gain1.connect(masterGain);
-    gain1.connect(reverbGain);
     osc1.start(startTime);
-    osc1.stop(startTime + duration + 0.2);
-    
-    // 第2泛音 - 模拟琴弦共鸣
+    osc1.stop(startTime + duration + 0.1);
+
+    // 第2泛音
     const osc2 = audioCtx.createOscillator();
     const gain2 = audioCtx.createGain();
     osc2.type = 'sine';
     osc2.frequency.value = freq * 2;
     gain2.gain.setValueAtTime(0, startTime);
-    gain2.gain.linearRampToValueAtTime(volume * 0.12, startTime + 0.05);
-    gain2.gain.exponentialRampToValueAtTime(volume * 0.03, startTime + duration * 0.5);
-    gain2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.8);
+    gain2.gain.linearRampToValueAtTime(volume * 0.25, startTime + 0.003);
+    gain2.gain.exponentialRampToValueAtTime(volume * 0.05, startTime + duration * 0.4);
+    gain2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.7);
     osc2.connect(gain2);
     gain2.connect(masterGain);
     osc2.start(startTime);
-    osc2.stop(startTime + duration * 0.8 + 0.1);
-    
-    // 第3泛音 - 更高更轻
+    osc2.stop(startTime + duration * 0.7 + 0.05);
+
+    // 第3泛音
     const osc3 = audioCtx.createOscillator();
     const gain3 = audioCtx.createGain();
-    osc3.type = 'triangle';
+    osc3.type = 'sine';
     osc3.frequency.value = freq * 3;
     gain3.gain.setValueAtTime(0, startTime);
-    gain3.gain.linearRampToValueAtTime(volume * 0.04, startTime + 0.03);
-    gain3.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.4);
+    gain3.gain.linearRampToValueAtTime(volume * 0.08, startTime + 0.002);
+    gain3.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.3);
     osc3.connect(gain3);
     gain3.connect(masterGain);
     osc3.start(startTime);
-    osc3.stop(startTime + duration * 0.5 + 0.1);
-    
-    // 击弦噪声 - 模拟古琴拨弦声
-    const bufferSize = audioCtx.sampleRate * 0.05;
-    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        noiseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 4);
+    osc3.stop(startTime + duration * 0.35);
+
+    // 击弦声
+    const bufSize = Math.floor(audioCtx.sampleRate * 0.03);
+    const noiseBuf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const noiseData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 6);
     }
     const noise = audioCtx.createBufferSource();
-    noise.buffer = noiseBuffer;
-    const noiseGain = audioCtx.createGain();
-    noiseGain.gain.value = volume * 0.15;
-    
-    const noiseFilter = audioCtx.createBiquadFilter();
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = freq * 2;
-    noiseFilter.Q.value = 2;
-    
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
+    noise.buffer = noiseBuf;
+    const nGain = audioCtx.createGain();
+    nGain.gain.value = volume * 0.08;
+    const nFilter = audioCtx.createBiquadFilter();
+    nFilter.type = 'lowpass';
+    nFilter.frequency.value = Math.min(freq * 4, 8000);
+    noise.connect(nFilter);
+    nFilter.connect(nGain);
+    nGain.connect(masterGain);
     noise.start(startTime);
 }
 
-function playSection(melody, startOffset) {
+// 弦乐音色 - 慢起音，持续
+function playStrings(notes, startTime, duration, volume) {
+    if (!audioCtx) return;
+    notes.forEach(function(freq) {
+        if (freq < 0) return;
+        // 用锯齿波+低通滤波模拟弦乐
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = freq * 3;
+        filter.Q.value = 0.7;
+
+        // 弦乐慢起音
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(volume, startTime + duration * 0.15);
+        gain.gain.setValueAtTime(volume, startTime + duration * 0.7);
+        gain.gain.linearRampToValueAtTime(0, startTime + duration);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(stringGain);
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.05);
+    });
+}
+
+function playSection(melody, strings, startOffset) {
     if (!audioCtx || !musicPlaying) return;
-    
-    const tempo = 0.55; // 每拍0.55秒，节奏适中
+
+    const tempo = 0.7;
     const now = audioCtx.currentTime + 0.1;
     let time = now + startOffset;
-    
+
+    // 弦乐铺底
+    strings.forEach(function(s) {
+        var sTime = now + startOffset + s.start * tempo;
+        playStrings(s.notes, sTime, s.dur * tempo, 0.06);
+    });
+
+    // 主旋律
     melody.forEach(function(note) {
         if (note[0] >= 0) {
-            const freq = PENTATONIC[note[0]];
-            const dur = note[1] * tempo;
-            playGuqinNote(freq, time, dur + 0.6, 0.18);
+            var dur = note[1] * tempo;
+            playPiano(note[0], time, dur + 0.8, 0.20);
         }
         time += note[1] * tempo;
     });
-    
+
     return time - now;
 }
 
-function playArpeggio(startOffset) {
+function playPianoAccomp(startOffset) {
     if (!audioCtx || !musicPlaying) return;
-    
-    const tempo = 0.55;
+    const tempo = 0.7;
     const now = audioCtx.currentTime + 0.1;
     let time = now + startOffset;
-    
-    ARPEGGIO.forEach(function(note) {
-        const freq = PENTATONIC[note[0]] * 0.5; // 低一个八度
-        const dur = note[1] * tempo;
-        playGuqinNote(freq, time, dur + 0.3, 0.06);
-        time += dur;
+    PIANO_L.forEach(function(note) {
+        if (note[0] >= 0) {
+            var dur = note[1] * tempo;
+            playPiano(note[0], time, dur + 0.3, 0.07);
+        }
+        time += note[1] * tempo;
     });
 }
 
 function playMelody() {
     if (!audioCtx || !musicPlaying) return;
-    
-    // 先播放A段
-    const sectionALen = playSection(MELODY_A, 0);
-    playArpeggio(0);
-    
-    // A段结束后播放B段
-    const totalLen = sectionALen;
+
+    const lenA = playSection(MELODY_A, STRINGS_A, 0);
+    playPianoAccomp(0);
+
     musicTimer = setTimeout(function() {
         if (!musicPlaying) return;
-        playSection(MELODY_B, 0);
-        playArpeggio(0);
-        
-        const sectionBLen = MELODY_B.reduce(function(sum, n) { return sum + n[1]; }, 0) * 0.55;
-        
-        // B段结束后重新循环
+        const lenB = playSection(MELODY_B, STRINGS_B, 0);
+        playPianoAccomp(0);
+
         musicTimer = setTimeout(function() {
             if (musicPlaying) playMelody();
-        }, sectionBLen * 1000 + 1000);
-    }, totalLen * 1000 + 1000);
+        }, lenB * 1000 + 1500);
+    }, lenA * 1000 + 1500);
 }
 
 function toggleMusic() {
     initAudio();
     const btn = document.getElementById('musicBtn');
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-    
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     if (musicPlaying) {
         musicPlaying = false;
         if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
@@ -714,21 +743,14 @@ function toggleMusic() {
     }
 }
 
-// 进入缅怀页 - 点击全屏引导后自动开始音乐
 function enterMemorial() {
     initAudio();
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     musicPlaying = true;
     playMelody();
-    
-    // 淡出引导层
     const overlay = document.getElementById('musicOverlay');
     overlay.classList.add('hidden');
     setTimeout(function() { overlay.style.display = 'none'; }, 800);
-    
-    // 显示右上角音乐按钮
     const btn = document.getElementById('musicBtn');
     btn.style.display = 'flex';
     btn.classList.add('playing');
